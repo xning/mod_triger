@@ -3,23 +3,23 @@ mod_triger
 
 # Why repeat? There is a mod_substitute and mod_proxy_html.
 
-I don't want to parse the total response bodies and use regexes. I just
+I don't want to parse the total response bodies and use regexes. I just   
 want insert my Javascript codes.
 
 #Introduction to  mod_triger?
 
-This module default action is just search <head> tag in the first data
-bucket and search </body> tag in the last data bucket. If either tag
+This module default action is just search `<head>` tag in the first data   
+bucket and search `</body>` tag in the last data bucket. If either tag   
 is found successfully, just insert JavaScript codes. If neither tag is   
 found, simply add the JavaScript codes to the end of the response   
 body.
 
 # The mod_triger assume following conditions
-Tag '<head>' and '</body>' are not separated by space charaters, or   
-non-visible control charaters or new line. '<head>' tag should be one of   
+Tag `<head>` and `</body>` are not separated by space charaters, or   
+non-visible control charaters or new line. `<head>` tag should be one of   
 following formats   
-<head>   
-<head ...>  
+`<head>`   
+`<head ...>`  
 
 In a word, if responses produced by popular web containers, this module   
 will work well.
@@ -54,8 +54,8 @@ apxs2 -c mod_triger.c && apxs2 -i -a  mod_triger.la
 # Configuraitons
 
 ## Configurations work on RHEL6/Fedora
-<VirtualHost *:80>   
-   ServerAdmin  admin@localhost.localdomain   
+`<VirtualHost *:80>`   
+   ServerAdmin  `admin@localhost.localdomain`   
    DocumentRoot /var/www/   
    LogLevel        Debug   
    TrigerEnable    On   
@@ -63,9 +63,9 @@ apxs2 -c mod_triger.c && apxs2 -i -a  mod_triger.la
    #TrigerCheckLength 256   
    #TrigerFullCheck On   
    #TrigerContentType text/html application/xhtml+xml   
-   #TrigerHTML "<script>alert('Hello from mod_triger')</script>"   
-   ProxyPass        / http://www.redhat.com/   
-   ProxyPassReverse / http://www.redhat.com/   
+   #TrigerHTML `"<script>alert('Hello from mod_triger')</script>"`   
+   ProxyPass        / `http://www.redhat.com/`   
+   ProxyPassReverse / `http://www.redhat.com/`   
    ProxyRequests     Off   
    SetOutputFilter  INFLATE;TRIGER;DEFLATE   
 </VirtualHost>   
@@ -88,12 +88,12 @@ Search each data bucket while no more than TrigerCheckLength, default is only ch
 Which types response that we will inject our HTML fragment, default are 'text/html' and 'application/xhtml+xml'.
 
 ### TrigerHTML HTMLfragment
-HTML fragment that Triger will insert into responses bodies after <head> tag or before </body> tag,  or simple at the end if neither tags found.   
+HTML fragment that Triger will insert into responses bodies after `<head>` tag or before `</body>` tag,  or simple at the end if neither tags found.   
 Default is such string   
-"<script>alert('Hello from mod_triger')</script>"
+`"<script>alert('Hello from mod_triger')</script>"`
 
 ### TrigerCheckLength number
-How long contents we check to find tags so we know where to innsert our js coedes, f.g., <head> and </body>. Default is 256.
+How long contents we check to find tags so we know where to innsert our js coedes, f.g., `<head>` and `</body>`. Default is 256.
 
 
 # Notice
@@ -101,4 +101,4 @@ How long contents we check to find tags so we know where to innsert our js coede
 If tag <head> is not in the first data bucket and </body> tag is not in   
 the last data bucket, or if the two tags are in two or more buckets,   
 mod_triger cannot find them, so cannot successfully process the response.   
-But this condition is nearly impossible.
+But this condition is nearly impossible.   
