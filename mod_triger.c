@@ -737,8 +737,8 @@ insert_html_fragment_at_tail(ap_filter_t * f,
 		      cfg->js);
 	pos =
 	    ctx->triger_bucket->body_end_tag_pos !=
-	    -1 ? ctx->triger_bucket->body_end_tag_pos : ctx->
-	    triger_bucket->html_end_tag_pos;
+	    -1 ? ctx->triger_bucket->
+	    body_end_tag_pos : ctx->triger_bucket->html_end_tag_pos;
 	apr_bucket_split(tmp_b, pos);
 	APR_BUCKET_INSERT_AFTER(tmp_b, js);
     }
