@@ -18,11 +18,14 @@
 #include "apr_want.h"
 #include <string.h>
 
-#define NEED_CONTENT_SIZE 256
+#define DEFAULT_ENABLED 0
+#define DEFAULT_INHERIT 1
 #define DEFAULT_JS "<script>alert('Hello from mod_triger')</script>"
 #define HTML_CTYPE "text/html"
 #define XHTML_CTYPE "application/xhtml+xml"
-#define VERSION 0.8
+#define DEFAULT_CHK_LEN 256
+#define DEFAULT_FULL_CHK 0
+#define VERSION 0.81
 #define AUTHOR "xning@redhat.com"
 
 module AP_MODULE_DECLARE_DATA triger_module;
@@ -41,9 +44,12 @@ typedef struct {
     triger_ctype_t *ctypes;
     apr_size_t chk_len;
     int full_chk;
+    int default_enabled;
+    int default_inherit;
     char *default_js;
     triger_ctype_t *default_ctypes;
     apr_size_t default_chk_len;
+    int default_full_chk;
 } triger_conf_t;
 
 typedef struct triger_bucket {
@@ -77,74 +83,24 @@ enum http_comments_type {
     microsoft_comment		/* <comment> </comment> */
 };
 
-static void *create_triger_srv_config(apr_pool_t * pool, server_rec * s)
+static void *create_triger_dir_config(apr_pool_t * pool, char *dumm)
 {
+    triger_ctype_t *m, *n;
     triger_conf_t *rv = apr_pcalloc(pool, sizeof(*rv));
     if (!rv)
 	goto last;
 
-    rv->enabled = 0;
-    rv->inherit = 0;
+    rv->enabled = -1;
+    rv->inherit = -1;
     rv->js = NULL;
     rv->ctypes = NULL;
     rv->chk_len = 0;
-    rv->full_chk = 0;
-  last:
-    return (void *) rv;
-}
+    rv->full_chk = -1;
 
-static void *merge_triger_srv_config(apr_pool_t * pool, void *BASE,
-				     void *ADD)
-{
-    triger_ctype_t *m, *n;
-    triger_conf_t *base = (triger_conf_t *) BASE;
-    triger_conf_t *add = (triger_conf_t *) ADD;
-    triger_conf_t *conf =
-	(triger_conf_t *) apr_palloc(pool, sizeof(triger_conf_t));
-
-    if (!conf)
-	goto last;
-
-    conf->enabled = add->enabled;
-    conf->inherit = add->inherit;
-    conf->full_chk = add->full_chk;
-
-    if (conf->inherit) {
-	conf->chk_len =
-	    add->chk_len > base->chk_len ? add->chk_len : base->chk_len >
-	    0 ? base->chk_len : 0;
-	if (add->js && base->js) {
-	    conf->js = apr_pstrcat(pool, add->js, base->js, NULL);
-	    if (!conf->js)
-		goto last;
-	} else if (add->js)
-	    conf->js = add->js;
-	else if (base->js)
-	    conf->js = base->js;
-	else
-	    conf->js = NULL;
-
-	if (add->ctypes && base->ctypes) {
-	    m = add->ctypes->prev;
-	    n = base->ctypes->prev;
-	    m->next = base->ctypes;
-	    base->ctypes->prev = m;
-
-	    add->ctypes->prev = n;
-	    conf->ctypes = add->ctypes;
-	} else if (add->ctypes)
-	    conf->ctypes = add->ctypes;
-	else if (base->ctypes)
-	    conf->ctypes = base->ctypes;
-	else
-	    conf->ctypes = NULL;
-    } else {
-	conf->chk_len = add->chk_len > 0 ? add->chk_len : 0;
-	conf->js = add->js ? add->js : NULL;
-	conf->ctypes = add->ctypes ? add->ctypes : NULL;
-    }
-    conf->default_js = apr_pstrdup(pool, DEFAULT_JS);
-    if (!conf->default_js)
+    rv->default_enabled = DEFAULT_ENABLED;
+    rv->default_inherit = DEFAULT_INHERIT;
+    rv->default_js = apr_pstrdup(pool, DEFAULT_JS);
+    if (!rv->default_js)
 	return NULL;
 
     m = apr_pcalloc(pool, sizeof(triger_ctype_t));
@@ -165,9 +121,93 @@ static void *merge_triger_srv_config(apr_pool_t * pool, void *BASE,
 
     m->prev = m->next = n;
     n->prev = m;
-    conf->default_ctypes = m;
+    rv->default_ctypes = m;
 
-    conf->default_chk_len = NEED_CONTENT_SIZE;
+    rv->default_chk_len = DEFAULT_CHK_LEN;
+    rv->default_full_chk = DEFAULT_FULL_CHK;
+  last:
+    return (void *) rv;
+}
+
+static void *merge_triger_dir_config(apr_pool_t * pool, void *BASE,
+				     void *ADD)
+{
+    triger_ctype_t *m, *n;
+    triger_conf_t *base = (triger_conf_t *) BASE;
+    triger_conf_t *add = (triger_conf_t *) ADD;
+
+    if (!base)
+	return add;
+
+    triger_conf_t *conf =
+	(triger_conf_t *) apr_palloc(pool, sizeof(triger_conf_t));
+    if (!conf)
+	goto last;
+
+    conf->inherit = add->inherit;
+
+    if (conf->inherit) {
+	if (add->enabled == -1 && base->enabled != -1)
+	    conf->enabled = base->enabled;
+	else if (add->enabled != -1)
+	    conf->enabled = add->enabled;
+	else
+	    conf->enabled = add->default_enabled;
+
+	if (add->js && base->js) {
+	    conf->js = apr_pstrcat(pool, add->js, base->js, NULL);
+	    if (!conf->js)
+		goto last;
+	} else if (add->js)
+	    conf->js = add->js;
+	else if (base->js)
+	    conf->js = base->js;
+	else
+	    conf->js = add->default_js;
+
+	if (add->ctypes && base->ctypes) {
+	    m = add->ctypes->prev;
+	    n = base->ctypes->prev;
+	    m->next = base->ctypes;
+	    base->ctypes->prev = m;
+
+	    add->ctypes->prev = n;
+	    conf->ctypes = add->ctypes;
+	} else if (add->ctypes)
+	    conf->ctypes = add->ctypes;
+	else if (base->ctypes)
+	    conf->ctypes = base->ctypes;
+	else
+	    conf->ctypes = add->default_ctypes;
+
+	if (add->chk_len == 0 && base->chk_len != 0)
+	    conf->chk_len = base->chk_len;
+	else if (add->chk_len != 0 && base->chk_len == 0)
+	    conf->chk_len = add->chk_len;
+	else if (add->chk_len != 0 && base->chk_len != 0)
+	    conf->chk_len =
+		add->chk_len >
+		base->chk_len ? add->chk_len : base->chk_len;
+	else
+	    conf->chk_len = add->default_chk_len;
+
+	if (add->full_chk == -1 && base->full_chk != -1)
+	    conf->full_chk = base->full_chk;
+	else if (add->full_chk != -1)
+	    conf->full_chk = add->full_chk;
+	else
+	    conf->full_chk = add->default_full_chk;
+
+    } else {
+	conf->enabled =
+	    add->enabled != -1 ? add->enabled : add->default_enabled;
+	conf->js = add->js ? add->js : add->default_js;
+	conf->ctypes = add->ctypes ? add->ctypes : add->default_ctypes;
+	conf->chk_len =
+	    add->chk_len != 0 ? add->chk_len : add->default_chk_len;
+	conf->full_chk =
+	    add->full_chk != -1 ? add->full_chk : add->default_full_chk;
+    }
 
   last:
     return (void *) conf;
@@ -192,14 +232,12 @@ static int is_this_html(request_rec * r)
 	return 0;
 
     triger_conf_t *cfg =
-	ap_get_module_config(r->server->module_config, &triger_module);
+	ap_get_module_config(r->per_dir_config, &triger_module);
 
     if (!cfg)
 	return 0;
 
-    t = cfg->ctypes ? cfg->ctypes : cfg->default_ctypes;
-
-    for (; t; t = t->next)
+    for (t = cfg->ctypes; t; t = t->next)
 	if (t->data)
 	    if (apr_strnatcasecmp(t->data, ctype) == 0)
 		return 1;
@@ -612,20 +650,16 @@ static int do_what_we_want_at_head(ap_filter_t * f,
     apr_bucket *js;
     if (ctx->find)
 	goto last;
-    if (cfg->js)
-	js = apr_bucket_transient_create(cfg->js, (apr_size_t)
-					 strlen(cfg->js) + 1,
-					 f->r->connection->bucket_alloc);
-    else
-	js = apr_bucket_transient_create(cfg->default_js, (apr_size_t)
-					 strlen(cfg->default_js) + 1,
-					 f->r->connection->bucket_alloc);
+    js = apr_bucket_transient_create(cfg->js, (apr_size_t)
+				     strlen(cfg->js) + 1,
+				     f->r->connection->bucket_alloc);
+
     if (!js)
 	goto last;
     if (ctx->triger_bucket->head_start_tag_pos != -1) {
 	ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, f->r,
 		      "The <head> tag found, insert at the end: %s",
-		      cfg->js ? cfg->js : cfg->default_js);
+		      cfg->js);
 	pos = ctx->triger_bucket->head_start_tag_pos;
 	if (pos + 1 < ctx->triger_bucket->len) {
 	    apr_bucket_split(tmp_b, pos + 1);
@@ -651,32 +685,29 @@ static int do_what_we_want_at_tail(ap_filter_t * f,
     triger_module_ctx_t *ctx = f->ctx;
     if (ctx->find)
 	goto last;
-    if (cfg->js)
-	js = apr_bucket_transient_create(cfg->js, (apr_size_t)
-					 strlen(cfg->js) + 1,
-					 f->r->connection->bucket_alloc);
-    else
-	js = apr_bucket_transient_create(cfg->default_js, (apr_size_t)
-					 strlen(cfg->default_js) + 1,
-					 f->r->connection->bucket_alloc);
+
+    js = apr_bucket_transient_create(cfg->js, (apr_size_t)
+				     strlen(cfg->js) + 1,
+				     f->r->connection->bucket_alloc);
+
     if (!js)
 	goto last;
     if (ctx->triger_bucket->body_end_tag_pos == -1
 	&& ctx->triger_bucket->html_end_tag_pos == -1) {
 	ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, f->r,
 		      "Neither </body> nor </html> tag found, insert at the end: %s",
-		      cfg->js ? cfg->js : cfg->default_js);
+		      cfg->js);
 	tmp_b = APR_BRIGADE_LAST(bb);
 	APR_BUCKET_INSERT_BEFORE(tmp_b, js);
     } else {
 	tmp_b = ctx->triger_bucket->b;
 	ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, f->r,
 		      "One of </body> and</html> tag are found, insert at there: %s",
-		      cfg->js ? cfg->js : cfg->default_js);
+		      cfg->js);
 	pos =
 	    ctx->triger_bucket->body_end_tag_pos !=
-	    -1 ? ctx->triger_bucket->body_end_tag_pos : ctx->
-	    triger_bucket->html_end_tag_pos;
+	    -1 ? ctx->triger_bucket->
+	    body_end_tag_pos : ctx->triger_bucket->html_end_tag_pos;
 	apr_bucket_split(tmp_b, pos);
 	APR_BUCKET_INSERT_AFTER(tmp_b, js);
     }
@@ -693,8 +724,7 @@ static apr_status_t triger_filter(ap_filter_t * f, apr_bucket_brigade * bb)
     triger_module_ctx_t *ctx = f->ctx;
     if (APR_BRIGADE_EMPTY(bb))
 	return APR_SUCCESS;
-    cfg =
-	ap_get_module_config(f->r->server->module_config, &triger_module);
+    cfg = ap_get_module_config(f->r->per_dir_config, &triger_module);
     if (!cfg)
 	goto last;
     if (!cfg->enabled)
@@ -713,8 +743,7 @@ static apr_status_t triger_filter(ap_filter_t * f, apr_bucket_brigade * bb)
 	    apr_pcalloc(f->r->pool, sizeof(triger_bucket_t));
 	if (!ctx->triger_bucket)
 	    goto last;
-	ctx->triger_bucket->limit =
-	    cfg->chk_len > 0 ? cfg->chk_len : cfg->default_chk_len;
+	ctx->triger_bucket->limit = cfg->chk_len;
 	ctx->head_check = 0;
 	apr_table_unset(f->r->headers_out, "Content-Length");
     } else
@@ -772,49 +801,40 @@ static apr_status_t triger_filter(ap_filter_t * f, apr_bucket_brigade * bb)
 
 static const char *set_enabled(cmd_parms * cmd, void *mconfig, int on)
 {
-    triger_conf_t *cfg = ap_get_module_config(cmd->server->module_config,
-					      &triger_module);
-    if (cfg)
-	cfg->enabled = on;
+    triger_conf_t *cfg = mconfig;
+    cfg->enabled = on;
     return NULL;
 }
 
 static const char *set_inherit(cmd_parms * cmd, void *mconfig, int on)
 {
-    triger_conf_t *cfg = ap_get_module_config(cmd->server->module_config,
-					      &triger_module);
-    if (cfg)
-	cfg->inherit = on;
+    triger_conf_t *cfg = mconfig;
+    cfg->inherit = on;
     return NULL;
 }
 
 static const char *set_full_chk(cmd_parms * cmd, void *mconfig, int on)
 {
-    triger_conf_t *cfg = ap_get_module_config(cmd->server->module_config,
-					      &triger_module);
-    if (cfg)
-	cfg->full_chk = on;
+    triger_conf_t *cfg = mconfig;
+    cfg->full_chk = on;
     return NULL;
 }
 
 static const char *set_js(cmd_parms * cmd, void *mconfig, const char *w)
 {
-    triger_conf_t *cfg = ap_get_module_config(cmd->server->module_config,
-					      &triger_module);
-    if (cfg)
-	if (w)
-	    cfg->js = apr_pstrdup(cmd->pool, w);
+    triger_conf_t *cfg = mconfig;
+    if (w)
+	cfg->js = apr_pstrdup(cmd->pool, w);
     return NULL;
 }
 
 static const char *set_chk_len(cmd_parms * cmd,
 			       void *mconfig, const char *w)
 {
-    triger_conf_t *cfg = ap_get_module_config(cmd->server->module_config,
-					      &triger_module);
-    if (cfg)
-	if (w)
-	    cfg->chk_len = (apr_size_t) atoi(w);
+    triger_conf_t *cfg = mconfig;
+
+    if (w)
+	cfg->chk_len = (apr_size_t) atoi(w);
     return NULL;
 }
 
@@ -825,10 +845,8 @@ static const char *set_ctypes(cmd_parms * cmd,
     apr_pool_t *pool = cmd->pool;
     if (!line)
 	return NULL;
-    triger_conf_t *cfg = ap_get_module_config(cmd->server->module_config,
-					      &triger_module);
-    if (!cfg)
-	return NULL;
+    triger_conf_t *cfg = mconf;
+
     triger_ctype_t *ctype = apr_pcalloc(pool, sizeof(triger_ctype_t));
     if (!ctype)
 	return NULL;
@@ -896,8 +914,9 @@ static const command_rec triger_cmds[] = {
 
 module AP_MODULE_DECLARE_DATA triger_module = {
     STANDARD20_MODULE_STUFF,
+    create_triger_dir_config,
+    merge_triger_dir_config,
     NULL,
     NULL,
-    create_triger_srv_config,
-    merge_triger_srv_config, triger_cmds, register_hooks
+    triger_cmds, register_hooks
 };
