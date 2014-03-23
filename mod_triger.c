@@ -67,12 +67,15 @@ typedef struct triger_bucket {
 typedef struct {
     int find;
     unsigned int times;
-    int no_tag;
-    int html_start_tag;
-    int head_start_tag;
-    int body_start_tag;
-    int body_end_tag;
-    int html_end_tag;
+    int unknown_start_tag_find;
+    int unknown_end_tag_find;
+    int no_tag_find;
+    int doctype_tag_find;
+    int html_start_tag_find;
+    int head_start_tag_find;
+    int body_start_tag_find;
+    int body_end_tag_find;
+    int html_end_tag_find;
     triger_bucket_t *triger_bucket;
     int head_check;
 } triger_module_ctx_t;
@@ -265,8 +268,8 @@ static triger_bucket_t *get_triger_bucket(ap_filter_t * f, apr_bucket * b)
     return rv;
 }
 
-static triger_bucket_t *get_first_data_bucket(ap_filter_t * f,
-					      apr_bucket_brigade * bb)
+static triger_bucket_t *get_data_at_head(ap_filter_t * f,
+					 apr_bucket_brigade * bb)
 {
     const char *data;
     apr_bucket *b = APR_BRIGADE_FIRST(bb);
@@ -281,8 +284,7 @@ static triger_bucket_t *get_first_data_bucket(ap_filter_t * f,
 	rv->html_start_tag_pos = rv->head_start_tag_pos =
 	rv->body_start_tag_pos = -1;
 
-    while (APR_BUCKET_IS_METADATA(b)
-	   && b != APR_BRIGADE_SENTINEL(bb))
+    while (APR_BUCKET_IS_METADATA(b) && b != APR_BRIGADE_SENTINEL(bb))
 	b = APR_BUCKET_NEXT(b);
 
     if (APR_BUCKET_IS_METADATA(b) || b == APR_BRIGADE_SENTINEL(bb))
@@ -296,8 +298,8 @@ static triger_bucket_t *get_first_data_bucket(ap_filter_t * f,
     return rv;
 }
 
-static triger_bucket_t *get_last_data_bucket(ap_filter_t * f,
-					     apr_bucket_brigade * bb)
+static triger_bucket_t *get_data_at_tail(ap_filter_t * f,
+					 apr_bucket_brigade * bb)
 {
     const char *data;
     apr_bucket *b = APR_BRIGADE_LAST(bb);
@@ -313,8 +315,7 @@ static triger_bucket_t *get_last_data_bucket(ap_filter_t * f,
 	rv->body_start_tag_pos = -1;
 
 
-    while (APR_BUCKET_IS_METADATA(b)
-	   && b != APR_BRIGADE_SENTINEL(bb))
+    while (APR_BUCKET_IS_METADATA(b) && b != APR_BRIGADE_SENTINEL(bb))
 	b = APR_BUCKET_PREV(b);
 
     if (APR_BUCKET_IS_METADATA(b) || b == APR_BRIGADE_SENTINEL(bb))
@@ -328,7 +329,8 @@ static triger_bucket_t *get_last_data_bucket(ap_filter_t * f,
     return rv;
 }
 
-static triger_bucket_t *where_to_insert_js_in_head(ap_filter_t * f)
+static triger_bucket_t *where_to_insert_html_fragment_at_head(ap_filter_t *
+							      f)
 {
     char c;
     int in_comments = -1;
@@ -392,19 +394,41 @@ static triger_bucket_t *where_to_insert_js_in_head(ap_filter_t * f)
 	} else {
 	    switch (c) {
 	    case '<':
-		if (i + 5 < len
-		    && (*(data + i + 1) == 'h' || *(data + i + 1) == 'H')
-		    && (*(data + i + 2) == 't' || *(data + i + 2) == 'T')
-		    && (*(data + i + 3) == 'm' || *(data + i + 3) == 'M')
-		    && (*(data + i + 4) == 'l' || *(data + i + 4) == 'L')
-		    && (*(data + i + 5) == '>' || *(data + i + 5) == ' ')) {
+		if (i + 14 < len
+		    && *(data + i + 1) == '!'
+		    && *(data + i + 2) == 'D'
+		    && *(data + i + 3) == 'O'
+		    && *(data + i + 4) == 'C'
+		    && *(data + i + 5) == 'T'
+		    && *(data + i + 6) == 'Y'
+		    && *(data + i + 7) == 'P'
+		    && *(data + i + 8) == 'E'
+		    && *(data + i + 9) == ' '
+		    && (*(data + i + 10) == 'h' || *(data + i + 10) == 'H')
+		    && (*(data + i + 11) == 't' || *(data + i + 11) == 'T')
+		    && (*(data + i + 12) == 'm' || *(data + i + 12) == 'M')
+		    && (*(data + i + 13) == 'l' || *(data + i + 13) == 'L')
+		    && *(data + i + 14) == ' ') {
+		    if (!ctx->doctype_tag_find)
+			ctx->doctype_tag_find = 1;
+		} else if (i + 5 < len
+			   && (*(data + i + 1) == 'h'
+			       || *(data + i + 1) == 'H')
+			   && (*(data + i + 2) == 't'
+			       || *(data + i + 2) == 'T')
+			   && (*(data + i + 3) == 'm'
+			       || *(data + i + 3) == 'M')
+			   && (*(data + i + 4) == 'l'
+			       || *(data + i + 4) == 'L')
+			   && (*(data + i + 5) == '>'
+			       || *(data + i + 5) == ' ')) {
 		    for (j = i + 5; *(data + j) != '>' && j < len - 1;
 			 j++);
 
 		    if (*(data + j) == '>') {
-			if (ctx->no_tag && !ctx->html_start_tag) {
-			    ctx->html_start_tag = 1;
-			    ctx->no_tag = 0;
+			if (ctx->no_tag_find && !ctx->html_start_tag_find) {
+			    ctx->html_start_tag_find = 1;
+			    ctx->no_tag_find = 0;
 			} else
 			    return rv;
 			rv->html_start_tag_pos = j;
@@ -426,9 +450,9 @@ static triger_bucket_t *where_to_insert_js_in_head(ap_filter_t * f)
 			 j++);
 
 		    if (*(data + j) == '>') {
-			if (!ctx->head_start_tag) {
-			    ctx->head_start_tag = 1;
-			    ctx->no_tag = 0;
+			if (!ctx->head_start_tag_find) {
+			    ctx->head_start_tag_find = 1;
+			    ctx->no_tag_find = 0;
 			} else
 			    return rv;
 
@@ -452,9 +476,9 @@ static triger_bucket_t *where_to_insert_js_in_head(ap_filter_t * f)
 			 j++);
 
 		    if (*(data + j) == '>') {
-			if (!ctx->body_start_tag) {
-			    ctx->body_start_tag = 1;
-			    ctx->no_tag = 0;
+			if (!ctx->body_start_tag_find) {
+			    ctx->body_start_tag_find = 1;
+			    ctx->no_tag_find = 0;
 			} else
 			    return rv;
 			rv->body_start_tag_pos = j;
@@ -496,6 +520,9 @@ static triger_bucket_t *where_to_insert_js_in_head(ap_filter_t * f)
 			       || *(data + i + 8) == ' ')) {
 		    in_comments = microsoft_comment;
 		    i = i + 8;
+		} else {
+		    ctx->unknown_start_tag_find = 1;
+		    return rv;
 		}
 		break;
 	    default:
@@ -507,7 +534,8 @@ static triger_bucket_t *where_to_insert_js_in_head(ap_filter_t * f)
     return rv;
 }
 
-static triger_bucket_t *where_to_insert_js_in_tail(ap_filter_t * f)
+static triger_bucket_t *where_to_insert_html_fragment_at_tail(ap_filter_t *
+							      f)
 {
     char c;
     int in_comments = -1;
@@ -577,9 +605,9 @@ static triger_bucket_t *where_to_insert_js_in_tail(ap_filter_t * f)
 			&& (*(data + i + 5) == 'l'
 			    || *(data + i + 5) == 'L')
 			&& *(data + i + 6) == '>') {
-			if (!ctx->html_end_tag) {
-			    ctx->html_end_tag = 1;
-			    ctx->no_tag = 0;
+			if (!ctx->html_end_tag_find) {
+			    ctx->html_end_tag_find = 1;
+			    ctx->no_tag_find = 0;
 			} else
 			    return rv;
 			rv->html_end_tag_pos = i;
@@ -592,9 +620,9 @@ static triger_bucket_t *where_to_insert_js_in_tail(ap_filter_t * f)
 			       && (*(data + i + 5) == 'y'
 				   || *(data + i + 5) == 'Y')
 			       && *(data + i + 6) == '>') {
-			if (!ctx->body_end_tag) {
-			    ctx->body_end_tag = 1;
-			    ctx->no_tag = 0;
+			if (!ctx->body_end_tag_find) {
+			    ctx->body_end_tag_find = 1;
+			    ctx->no_tag_find = 0;
 			} else
 			    return rv;
 			rv->body_end_tag_pos = i;
@@ -617,6 +645,9 @@ static triger_bucket_t *where_to_insert_js_in_tail(ap_filter_t * f)
 				|| *(data + i + 8) == 'T')
 			    && *(data + i + 9) == '>')
 			in_comments = microsoft_comment;
+		} else {
+		    ctx->unknown_end_tag_find = 1;
+		    return rv;
 		}
 		break;
 	    case '>':
@@ -639,9 +670,9 @@ static triger_bucket_t *where_to_insert_js_in_tail(ap_filter_t * f)
     return rv;
 }
 
-static int do_what_we_want_at_head(ap_filter_t * f,
-				   apr_bucket_brigade * bb,
-				   triger_conf_t * cfg)
+static int
+insert_html_fragment_at_head(ap_filter_t * f,
+			     apr_bucket_brigade * bb, triger_conf_t * cfg)
 {
     triger_module_ctx_t *ctx = f->ctx;
     apr_bucket *tmp_b = ctx->triger_bucket->b;
@@ -674,9 +705,9 @@ static int do_what_we_want_at_head(ap_filter_t * f,
 }
 
 
-static int do_what_we_want_at_tail(ap_filter_t * f,
-				   apr_bucket_brigade * bb,
-				   triger_conf_t * cfg)
+static int
+insert_html_fragment_at_tail(ap_filter_t * f,
+			     apr_bucket_brigade * bb, triger_conf_t * cfg)
 {
     apr_bucket *tmp_b;
     int ret = 0;
@@ -706,8 +737,8 @@ static int do_what_we_want_at_tail(ap_filter_t * f,
 		      cfg->js);
 	pos =
 	    ctx->triger_bucket->body_end_tag_pos !=
-	    -1 ? ctx->triger_bucket->
-	    body_end_tag_pos : ctx->triger_bucket->html_end_tag_pos;
+	    -1 ? ctx->triger_bucket->body_end_tag_pos : ctx->
+	    triger_bucket->html_end_tag_pos;
 	apr_bucket_split(tmp_b, pos);
 	APR_BUCKET_INSERT_AFTER(tmp_b, js);
     }
@@ -734,11 +765,14 @@ static apr_status_t triger_filter(ap_filter_t * f, apr_bucket_brigade * bb)
 	if (!ctx)
 	    goto last;
 	ctx->times = 1;
+	ctx->unknown_start_tag_find = 0;
+	ctx->unknown_end_tag_find = 0;
 	ctx->find = 0;
-	ctx->no_tag = 1;
-	ctx->html_start_tag = ctx->head_start_tag =
-	    ctx->body_start_tag = ctx->body_end_tag = ctx->html_end_tag =
-	    0;
+	ctx->no_tag_find = 1;
+	ctx->doctype_tag_find = 0;
+	ctx->html_start_tag_find = ctx->head_start_tag_find =
+	    ctx->body_start_tag_find = ctx->body_end_tag_find =
+	    ctx->html_end_tag_find = 0;
 	ctx->triger_bucket =
 	    apr_pcalloc(f->r->pool, sizeof(triger_bucket_t));
 	if (!ctx->triger_bucket)
@@ -757,26 +791,26 @@ static apr_status_t triger_filter(ap_filter_t * f, apr_bucket_brigade * bb)
 		      "Only check the first and last data buckets");
 	if (!ctx->head_check) {
 	    ctx->head_check = 1;
-	    get_first_data_bucket(f, bb);
-	    where_to_insert_js_in_head(f);
+	    get_data_at_head(f, bb);
+	    where_to_insert_html_fragment_at_head(f);
 	    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, f->r,
 			  "Find the first data bucket. Content length: %d uri: %s path info: %s positions found: %d (<head>)",
 			  (int) ctx->triger_bucket->len, f->r->uri,
 			  f->r->path_info,
 			  (int) ctx->triger_bucket->head_start_tag_pos);
-	    do_what_we_want_at_head(f, bb, cfg);
+	    insert_html_fragment_at_head(f, bb, cfg);
 	}
 	if (ctx->find || !APR_BUCKET_IS_EOS(APR_BRIGADE_LAST(bb)))
 	    goto last;
-	get_last_data_bucket(f, bb);
-	where_to_insert_js_in_tail(f);
+	get_data_at_tail(f, bb);
+	where_to_insert_html_fragment_at_tail(f);
 	ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, f->r,
 		      "Find the last data bucket. Content length: %d uri: %s path info: %s positions found: %d (</body>) %d (/html)",
 		      (int) ctx->triger_bucket->len, f->r->uri,
 		      f->r->path_info,
 		      (int) ctx->triger_bucket->body_end_tag_pos,
 		      (int) ctx->triger_bucket->html_end_tag_pos);
-	do_what_we_want_at_tail(f, bb, cfg);
+	insert_html_fragment_at_tail(f, bb, cfg);
     } else {
 	ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, f->r,
 		      "Check each data bucket");
@@ -784,13 +818,13 @@ static apr_status_t triger_filter(ap_filter_t * f, apr_bucket_brigade * bb)
 	     b != APR_BRIGADE_SENTINEL(bb); b = APR_BUCKET_NEXT(b)) {
 	    if (!APR_BUCKET_IS_METADATA(b)) {
 		get_triger_bucket(f, b);
-		where_to_insert_js_in_head(f);
-		do_what_we_want_at_head(f, bb, cfg);
+		where_to_insert_html_fragment_at_head(f);
+		insert_html_fragment_at_head(f, bb, cfg);
 	    }
 	    if (!ctx->find && APR_BUCKET_IS_EOS(APR_BRIGADE_LAST(bb))) {
-		get_last_data_bucket(f, bb);
-		where_to_insert_js_in_tail(f);
-		do_what_we_want_at_tail(f, bb, cfg);
+		get_data_at_tail(f, bb);
+		where_to_insert_html_fragment_at_tail(f);
+		insert_html_fragment_at_tail(f, bb, cfg);
 	    }
 	}
     }
@@ -828,8 +862,8 @@ static const char *set_js(cmd_parms * cmd, void *mconfig, const char *w)
     return NULL;
 }
 
-static const char *set_chk_len(cmd_parms * cmd,
-			       void *mconfig, const char *w)
+static const char *set_chk_len(cmd_parms * cmd, void *mconfig,
+			       const char *w)
 {
     triger_conf_t *cfg = mconfig;
 
@@ -838,8 +872,8 @@ static const char *set_chk_len(cmd_parms * cmd,
     return NULL;
 }
 
-static const char *set_ctypes(cmd_parms * cmd,
-			      void *mconf, const char *line)
+static const char *set_ctypes(cmd_parms * cmd, void *mconf,
+			      const char *line)
 {
     triger_ctype_t *tmp_ctype;
     apr_pool_t *pool = cmd->pool;
