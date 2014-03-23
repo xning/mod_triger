@@ -12,9 +12,8 @@ data fragment (the first non-meta data bucket) of a response body.
 This module default action is scan &lt;head&gt; tag in the first data     
 bucket. If successful, insert HTML fragment after the &lt;head&gt;    
 tag. If failed, scan &lt;/body&gt; tag in the last data bucket. If    
-sucessful, insert HTML fragement before &lt;/body&gt. If failed,     
-just insert JavaScript codes. If neither tag is to the end of the    
-response body.
+sucessful, insert HTML fragement before &lt;/body&gt;. If failed,     
+just insert JavaScript codes to the end of the response body.
 
 ### The mod_triger assume following conditions
 Tag &lt;head&gt; and &lt;/body&gt; are not separated by space charaters, or   
@@ -36,8 +35,10 @@ Following steps, except step 2, need run as root or sudo.
     yum -y install httpd-devel gcc libtool   
 
 ##### For debian-like system, install one of apache develop package.
-    apt-get -y install apache2-prefork-dev gcc libtool   
-or   
+    apt-get -y install apache2-prefork-dev gcc libtool
+    
+or
+
     apt-get -y install apache2-threaded-dev gcc libtool   
 
 #### 2. Get mod_triger source code
