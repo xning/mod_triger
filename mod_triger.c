@@ -538,19 +538,20 @@ static triger_bucket_t *where_to_insert_html_fragment_at_tail(ap_filter_t *
 							      f)
 {
     char c;
+    apr_size_t i = 0;
     int in_comments = -1;
     triger_module_ctx_t *ctx = f->ctx;
     triger_bucket_t *rv = ctx->triger_bucket;
-    apr_size_t i = rv->len - 1;
+    apr_size_t j = rv->len;
     apr_size_t len = rv->len;
     apr_size_t char_counts = 0;
     const char *data = rv->data;
     rv->body_end_tag_pos = rv->html_end_tag_pos = -1;
     ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, f->r,
 		  "Look for </body> and </html>");
-    if (len < 1)
-	return rv;
-    for (; i >= 0; i--) {
+
+    for (; j >= 1; j--) {
+	i = j - 1;
 	if (char_counts > rv->limit)
 	    return rv;
 	else
@@ -704,7 +705,6 @@ insert_html_fragment_at_head(ap_filter_t * f,
     return ret;
 }
 
-
 static int
 insert_html_fragment_at_tail(ap_filter_t * f,
 			     apr_bucket_brigade * bb, triger_conf_t * cfg)
@@ -737,8 +737,8 @@ insert_html_fragment_at_tail(ap_filter_t * f,
 		      cfg->js);
 	pos =
 	    ctx->triger_bucket->body_end_tag_pos !=
-	    -1 ? ctx->triger_bucket->
-	    body_end_tag_pos : ctx->triger_bucket->html_end_tag_pos;
+	    -1 ? ctx->triger_bucket->body_end_tag_pos : ctx->
+	    triger_bucket->html_end_tag_pos;
 	apr_bucket_split(tmp_b, pos);
 	APR_BUCKET_INSERT_AFTER(tmp_b, js);
     }
