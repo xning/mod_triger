@@ -99,5 +99,9 @@ How long contents we check to find tags so we know where to innsert our js coede
 
 If tag &lt;head&gt; is not in the first data bucket and &lt;/body&gt; tag is not in   
 the last data bucket, or if the two tags are in two or more buckets,   
-mod_triger cannot find them, so cannot successfully process the response.   
+mod_triger cannot find them, so cannot successfully find tags in the response.   
 But this condition is nearly impossible.   
+
+Even in the worst situation, mod_triger doesn't just skip the response, it will add    
+the HTML fragments at the end of the response body. Believe it or not, this work    
+well for mainstream browsers.
