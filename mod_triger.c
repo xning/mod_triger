@@ -2,7 +2,6 @@
  * mod_triger.c: Add our scripts codes in the beginning or end of response
  * in the fly, that these scripts codes make custom-made responses for us.
  */
-
 #include "httpd.h"
 #include "http_config.h"
 #include "http_core.h"
@@ -25,15 +24,15 @@
 #define XHTML_CTYPE "application/xhtml+xml"
 #define DEFAULT_CHK_LEN 256
 #define DEFAULT_FULL_CHK 0
-#define VERSION 0.81
+#define VERSION 0.82
 #define AUTHOR "xning@redhat.com"
+#define DEFAULT_CTYPES_LEN 3
+#define CTYPES_LEN 16
 
 module AP_MODULE_DECLARE_DATA triger_module;
 static const char triger_filter_name[] = "TRIGER";
 
-typedef struct triger_ctype {
-    struct triger_ctype *prev;
-    struct triger_ctype *next;
+typedef struct {
     char *data;
 } triger_ctype_t;
 
@@ -41,13 +40,13 @@ typedef struct {
     int enabled;
     int inherit;
     char *js;
-    triger_ctype_t *ctypes;
+    apr_array_header_t *ctypes;
     apr_size_t chk_len;
     int full_chk;
     int default_enabled;
     int default_inherit;
     char *default_js;
-    triger_ctype_t *default_ctypes;
+    apr_array_header_t *default_ctypes;
     apr_size_t default_chk_len;
     int default_full_chk;
 } triger_conf_t;
@@ -88,7 +87,8 @@ enum http_comments_type {
 
 static void *create_triger_dir_config(apr_pool_t * pool, char *dumm)
 {
-    triger_ctype_t *m, *n;
+    char *data = NULL;
+    triger_ctype_t *ctype;
     triger_conf_t *rv = apr_pcalloc(pool, sizeof(*rv));
     if (!rv)
 	goto last;
@@ -96,7 +96,12 @@ static void *create_triger_dir_config(apr_pool_t * pool, char *dumm)
     rv->enabled = -1;
     rv->inherit = -1;
     rv->js = NULL;
-    rv->ctypes = NULL;
+    rv->ctypes = apr_array_make(pool, CTYPES_LEN, sizeof(triger_ctype_t));
+    rv->default_ctypes =
+	apr_array_make(pool, DEFAULT_CTYPES_LEN, sizeof(triger_ctype_t));
+
+    /*    ap_log_error(APLOG_MARK, APLOG_ERR, 0, 0, NULL, "xning here"); */
+
     rv->chk_len = 0;
     rv->full_chk = -1;
 
@@ -106,25 +111,21 @@ static void *create_triger_dir_config(apr_pool_t * pool, char *dumm)
     if (!rv->default_js)
 	return NULL;
 
-    m = apr_pcalloc(pool, sizeof(triger_ctype_t));
-    if (!m)
+    data = apr_pstrdup(pool, HTML_CTYPE);
+    if (!data)
 	return NULL;
-    m->prev = m->next = NULL;
-    m->data = apr_pstrdup(pool, HTML_CTYPE);
-    if (!m->data)
-	return NULL;
+    else {
+	ctype = apr_array_push(rv->default_ctypes);
+	ctype->data = data;
+    }
 
-    n = apr_pcalloc(pool, sizeof(triger_ctype_t));
-    if (!n)
+    data = apr_pstrdup(pool, XHTML_CTYPE);
+    if (!data)
 	return NULL;
-    n->prev = n->next = NULL;
-    n->data = apr_pstrdup(pool, XHTML_CTYPE);
-    if (!n->data)
-	return NULL;
-
-    m->prev = m->next = n;
-    n->prev = m;
-    rv->default_ctypes = m;
+    else {
+	ctype = apr_array_push(rv->default_ctypes);
+	ctype->data = data;
+    }
 
     rv->default_chk_len = DEFAULT_CHK_LEN;
     rv->default_full_chk = DEFAULT_FULL_CHK;
@@ -135,7 +136,8 @@ static void *create_triger_dir_config(apr_pool_t * pool, char *dumm)
 static void *merge_triger_dir_config(apr_pool_t * pool, void *BASE,
 				     void *ADD)
 {
-    triger_ctype_t *m, *n;
+    int i, j, skip;
+    triger_ctype_t *ctype;
     triger_conf_t *base = (triger_conf_t *) BASE;
     triger_conf_t *add = (triger_conf_t *) ADD;
 
@@ -157,6 +159,39 @@ static void *merge_triger_dir_config(apr_pool_t * pool, void *BASE,
 	else
 	    conf->enabled = add->default_enabled;
 
+	if (add->ctypes->nelts > 0) {
+	    for (i = 0; i < base->ctypes->nelts; i++) {
+		skip = 0;
+		for (j = 0; j < add->ctypes->nelts; j++) {
+		    if (!apr_strnatcmp
+			((((triger_ctype_t *) (add->ctypes->
+					       elts))[j]).data,
+			 (((triger_ctype_t *) (base->ctypes->
+					       elts))[i]).data)) {
+			skip = 1;
+			break;
+		    }
+		}
+		if (skip)
+		    continue;
+		else {
+		    ctype = apr_array_push(add->ctypes);
+		    ctype->data =
+			(((triger_ctype_t *) (base->ctypes->
+					      elts))[i]).data;
+		}
+	    }
+	} else {
+	    apr_array_clear(add->ctypes);
+	    if (base->ctypes->nelts) {
+		add->ctypes = base->ctypes;
+	    } else {
+		add->ctypes = add->default_ctypes;
+	    }
+	}
+
+	conf->ctypes = add->ctypes;
+
 	if (add->js && base->js) {
 	    conf->js = apr_pstrcat(pool, add->js, base->js, NULL);
 	    if (!conf->js)
@@ -168,20 +203,6 @@ static void *merge_triger_dir_config(apr_pool_t * pool, void *BASE,
 	else
 	    conf->js = add->default_js;
 
-	if (add->ctypes && base->ctypes) {
-	    m = add->ctypes->prev;
-	    n = base->ctypes->prev;
-	    m->next = base->ctypes;
-	    base->ctypes->prev = m;
-
-	    add->ctypes->prev = n;
-	    conf->ctypes = add->ctypes;
-	} else if (add->ctypes)
-	    conf->ctypes = add->ctypes;
-	else if (base->ctypes)
-	    conf->ctypes = base->ctypes;
-	else
-	    conf->ctypes = add->default_ctypes;
 
 	if (add->chk_len == 0 && base->chk_len != 0)
 	    conf->chk_len = base->chk_len;
@@ -205,7 +226,12 @@ static void *merge_triger_dir_config(apr_pool_t * pool, void *BASE,
 	conf->enabled =
 	    add->enabled != -1 ? add->enabled : add->default_enabled;
 	conf->js = add->js ? add->js : add->default_js;
-	conf->ctypes = add->ctypes ? add->ctypes : add->default_ctypes;
+	if (add->ctypes->nelts > 0)
+	    conf->ctypes = add->ctypes;
+	else {
+	    /*        apr_array_clear(add->ctypes); */
+	    conf->ctypes = add->default_ctypes;
+	}
 	conf->chk_len =
 	    add->chk_len != 0 ? add->chk_len : add->default_chk_len;
 	conf->full_chk =
@@ -218,8 +244,7 @@ static void *merge_triger_dir_config(apr_pool_t * pool, void *BASE,
 
 static int is_this_html(request_rec * r)
 {
-
-    triger_ctype_t *t;
+    int i = 0;
     const char *ctype_line_val =
 	apr_table_get(r->headers_out, "Content-Type");
 
@@ -240,10 +265,12 @@ static int is_this_html(request_rec * r)
     if (!cfg)
 	return 0;
 
-    for (t = cfg->ctypes; t; t = t->next)
-	if (t->data)
-	    if (apr_strnatcasecmp(t->data, ctype) == 0)
-		return 1;
+    for (i = 0; i < cfg->ctypes->nelts; i++)
+	if (apr_strnatcasecmp
+	    ((((triger_ctype_t *) (cfg->ctypes->elts))[i]).data,
+	     ctype) == 0)
+	    return 1;
+
     return 0;
 }
 
@@ -332,7 +359,6 @@ static triger_bucket_t *get_data_at_tail(ap_filter_t * f,
 static triger_bucket_t *where_to_insert_html_fragment_at_head(ap_filter_t *
 							      f)
 {
-    char c;
     int in_comments = -1;
     apr_size_t i = 0, j = 0;;
     apr_size_t char_counts = 0;
@@ -350,9 +376,8 @@ static triger_bucket_t *where_to_insert_html_fragment_at_head(ap_filter_t *
 	    return rv;
 	else
 	    char_counts++;
-	c = *(data + i);
 	if (in_comments != -1) {
-	    switch (c) {
+	    switch (*(data + i)) {
 	    case '>':
 		if (i >= 2) {
 		    if (in_comments == html_comment) {
@@ -392,7 +417,7 @@ static triger_bucket_t *where_to_insert_html_fragment_at_head(ap_filter_t *
 		continue;
 	    }
 	} else {
-	    switch (c) {
+	    switch (*(data + i)) {
 	    case '<':
 		if (i + 14 < len
 		    && *(data + i + 1) == '!'
@@ -537,7 +562,6 @@ static triger_bucket_t *where_to_insert_html_fragment_at_head(ap_filter_t *
 static triger_bucket_t *where_to_insert_html_fragment_at_tail(ap_filter_t *
 							      f)
 {
-    char c;
     apr_size_t i = 0;
     int in_comments = -1;
     triger_module_ctx_t *ctx = f->ctx;
@@ -556,9 +580,8 @@ static triger_bucket_t *where_to_insert_html_fragment_at_tail(ap_filter_t *
 	    return rv;
 	else
 	    char_counts++;
-	c = *(data + i);
 	if (in_comments != -1) {
-	    switch (c) {
+	    switch (*(data + i)) {
 	    case '<':
 		if (in_comments == html_comment) {
 		    if (i + 3 < len && *(data + i + 1) == '!'
@@ -595,7 +618,7 @@ static triger_bucket_t *where_to_insert_html_fragment_at_tail(ap_filter_t *
 		continue;
 	    }
 	} else {
-	    switch (c) {
+	    switch (*(data + i)) {
 	    case '<':
 		if (i + 6 < len && *(data + i + 1) == '/') {
 		    if ((*(data + i + 2) == 'h' || *(data + i + 2) == 'H')
@@ -875,33 +898,15 @@ static const char *set_chk_len(cmd_parms * cmd, void *mconfig,
 static const char *set_ctypes(cmd_parms * cmd, void *mconf,
 			      const char *line)
 {
-    triger_ctype_t *tmp_ctype;
+    triger_ctype_t *ctype;
     apr_pool_t *pool = cmd->pool;
     if (!line)
 	return NULL;
     triger_conf_t *cfg = mconf;
 
-    triger_ctype_t *ctype = apr_pcalloc(pool, sizeof(triger_ctype_t));
-    if (!ctype)
-	return NULL;
+    ctype = apr_array_push(cfg->ctypes);
     ctype->data = apr_pstrdup(pool, line);
-    if (!ctype->data)
-	return NULL;
-    ctype->prev = ctype->next = NULL;
-    if (!cfg->ctypes) {
-	cfg->ctypes = ctype;
-    } else {
-	tmp_ctype = cfg->ctypes->prev;
-	if (tmp_ctype) {
-	    tmp_ctype->next = ctype;
-	    ctype->prev = tmp_ctype;
-	    cfg->ctypes->prev = ctype;
-	} else {
-	    cfg->ctypes->next = ctype;
-	    ctype->prev = cfg->ctypes;
-	    cfg->ctypes->prev = ctype;
-	}
-    }
+
     return NULL;
 }
 
