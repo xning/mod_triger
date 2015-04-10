@@ -24,7 +24,7 @@
 #define XHTML_CTYPE "application/xhtml+xml"
 #define DEFAULT_CHK_LEN 256
 #define DEFAULT_FULL_CHK 0
-#define VERSION 0.82
+#define VERSION 0.90
 #define AUTHOR "xning@redhat.com"
 #define DEFAULT_CTYPES_LEN 3
 #define CTYPES_LEN 16
@@ -99,8 +99,6 @@ static void *create_triger_dir_config(apr_pool_t * pool, char *dumm)
     rv->ctypes = apr_array_make(pool, CTYPES_LEN, sizeof(triger_ctype_t));
     rv->default_ctypes =
 	apr_array_make(pool, DEFAULT_CTYPES_LEN, sizeof(triger_ctype_t));
-
-    /*    ap_log_error(APLOG_MARK, APLOG_ERR, 0, 0, NULL, "xning here"); */
 
     rv->chk_len = 0;
     rv->full_chk = -1;
@@ -229,7 +227,6 @@ static void *merge_triger_dir_config(apr_pool_t * pool, void *BASE,
 	if (add->ctypes->nelts > 0)
 	    conf->ctypes = add->ctypes;
 	else {
-	    /*        apr_array_clear(add->ctypes); */
 	    conf->ctypes = add->default_ctypes;
 	}
 	conf->chk_len =
@@ -433,7 +430,7 @@ static triger_bucket_t *where_to_insert_html_fragment_at_head(ap_filter_t *
 		    && (*(data + i + 11) == 't' || *(data + i + 11) == 'T')
 		    && (*(data + i + 12) == 'm' || *(data + i + 12) == 'M')
 		    && (*(data + i + 13) == 'l' || *(data + i + 13) == 'L')
-		    && *(data + i + 14) == ' ') {
+		    && (*(data + i + 14) == ' ' || *(data + i + 14) == '>')) {
 		    if (!ctx->doctype_tag_find)
 			ctx->doctype_tag_find = 1;
 		} else if (i + 5 < len
