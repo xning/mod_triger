@@ -1,13 +1,13 @@
 ## About mod_triger
 
-### Why repeat? There is a mod_substitute and mod_proxy_html.
+### Why repeat? There is a mod\_substitute and mod\_proxy\_html.
 
 I don't want to parse the total response bodies or use regexes. I just    
 want insert my JavaScript codes after the &lt;head&gt; tag or before    
 the &lt;/body&gt; tag simply. I found it was enough to scan the first    
 data fragment (the first non-meta data bucket) of a response body.
 
-### Introduction to  mod_triger?
+### Introduction to mod\_triger?
 
 This module default action is scan &lt;head&gt; tag in the first data     
 bucket. If successful, insert HTML fragment after the &lt;head&gt;    
@@ -15,7 +15,7 @@ tag. If failed, scan &lt;/body&gt; tag in the last data bucket. If
 sucessful, insert HTML fragement before &lt;/body&gt;. If failed,     
 just insert JavaScript codes to the end of the response body.
 
-### The mod_triger assume following conditions
+### The mod\_triger assume following conditions
 Tag &lt;head&gt; and &lt;/body&gt; are not separated by space charaters, or   
 non-visible control charaters or new line. &lt;head&gt; tag should be one of   
 following formats   
@@ -41,7 +41,7 @@ or
 
     apt-get -y install apache2-threaded-dev gcc libtool   
 
-#### 2. Get mod_triger source code
+#### 2. Get mod\_triger source code
     git clone https://github.com/xning/mod_triger.git   
 
 #### 3. Complile and install
@@ -90,7 +90,7 @@ Which types response that we will inject our HTML fragment, default are 'text/ht
 HTML fragment that Triger will insert into responses bodies after &lt;head&gt; tag or before &lt;/body&gt; tag,  or simple at the end if neither tags found.   
 Default is such string
 
-    "<script>alert('Hello from mod_triger')</script>"
+    "<script>alert('Hello from mod_triger')</script>"  
 
 ##### TrigerCheckLength number
 How long contents we check to find tags so we know where to innsert our js coedes, f.g., &lt;head&gt; and &lt;/body&gt;. Default is 256.
@@ -99,9 +99,117 @@ How long contents we check to find tags so we know where to innsert our js coede
 
 If tag &lt;head&gt; is not in the first data bucket and &lt;/body&gt; tag is not in   
 the last data bucket, or if the two tags are in two or more buckets,   
-mod_triger cannot find them, so cannot successfully find tags in the response.   
+mod\_triger cannot find them, so cannot successfully find tags in the response.   
 But this condition is nearly impossible.   
 
-Even in the worst situation, mod_triger doesn't just skip the response, it will add    
+Even in the worst situation, mod\_triger doesn't just skip the response, it will add    
 the HTML fragments at the end of the response body. Believe it or not, this work    
-well for mainstream browsers.
+well for mainstream browsers.  
+
+### How to configure mod_proxy for https and Kerberos authentication
+
+#### 1. Create a self-signed certificate
+
+        openssl genrsa -out server.key 1024  
+        openssl req -new -key server.key -out server.csr  
+        cp server.key server.key.org  
+        openssl rsa -in server.key.org -out server.key  
+        openssl x509 -req -days 365 -in server.csr -signkey server.key -out server.crt  
+
+Then copy the public and private certificates to the right path
+
+        cp server.crt /etc/pki/tls/certs/server.crt  
+        cp server.key /etc/pki/tls/private/server.key  
+
+#### 2. Tips
+
+To make sure that the Kerberos authentication could work, we need the user engent, here it is firefox,
+to access our proxy server by the orgin backend server DNS name. Hence we should configure the /etc/hosts for firefox.
+
+For example, suppose we have two hosts. One is 192.168.0.3, the other is 192.168.0.7. We run Firefox
+on the former host, and Apache HTTPD (the proxy host) on the later one. And we let the later to proxy the backend web server "projects.example.com".
+
+So we add the following line to the /etc/hosts file on the 192.168.0.3  
+
+         192.168.0.7 projects.example.com
+
+Sure here you need configure firefox to support the Kerberos authentication. Pls reference  
+
+[Configuring Firefox to use Kerberos for SSO](https://access.redhat.com/documentation/en-US/Red_Hat_Enterprise_Linux/5/html/Deployment_Guide/sso-config-firefox.html)
+
+#### 3. Configuring mod_proxy
+
+Here is an example.  
+
+     <VirtualHost 192.168.0.7:443>  
+          ServerName projects.example.com  
+
+          ErrorLog logs/ssl_error_log  
+          TransferLog logs/ssl_access_log  
+          LogLevel Warn  
+           
+          SSLEngine on  
+          
+          SSLProtocol all -SSLv2  
+          SSLCipherSuite ALL:!ADH:!EXPORT:!SSLv2:RC4+RSA:+HIGH:+MEDIUM:+LOW  
+          
+          SSLCertificateFile /etc/pki/tls/certs/server.crt  
+          SSLCertificateKeyFile /etc/pki/tls/private/server.key  
+          
+          <Files ~ "\.(cgi|shtml|phtml|php3?)$">  
+              SSLOptions +StdEnvVars  
+          </Files>  
+          <Directory "/var/www/cgi-bin"&gt  
+              SSLOptions +StdEnvVars  
+          </Directory>  
+          
+          SetEnvIf User-Agent ".*MSIE.*" \  
+              nokeepalive ssl-unclean-shutdown \  
+              downgrade-1.0 force-response-1.0  
+          
+          CustomLog logs/ssl_request_log \  
+               "%t %h %{SSL_PROTOCOL}x %{SSL_CIPHER}x \"%r\" %b"  
+          
+          ServerAdmin  admin@localhost.localdomain  
+          DocumentRoot /var/www/  
+          TrigerEnable   On  
+          #TrigerInherit On  
+          #TrigerCheckLength 256  
+          #TrigerContentType text/html application/xhtml+xml  
+          #TrigerHTML '<script type="text/javascript" defer>console.log("Hello from mod_triger")</script>'  
+          SSLProxyEngine On  
+          ProxyPassInterpolateEnv On  
+          AllowCONNECT 443  
+          # The backend server's CA certificate if the CA is not a public one.
+          SSLProxyCACertificateFile /etc/pki/tls/certs/backend_server.crt  
+          ProxyPassMatch        ^/znznzs/.*\.js$ !  
+          ProxyPass        / https://projects.example.com/  
+          ProxyPassReverse / https://projects.example.com/  
+          
+          ProxyRequests     Off  
+          ProxyPreserveHost On  
+          SetOutputFilter  INFLATE;TRIGER;DEFLATE  
+    </VirtualHost>
+
+#### 4. It's time to try.
+
+First, tell the Apache HTTPD to read the above configuration.
+
+        service httpd restart
+
+Second, get a TGT
+
+        kinit
+
+It's time to try now.
+
+### Wireshark and HTTPS
+
+Pls reference here
+
+[NSS Key Log Format](https://developer.mozilla.org/en-US/docs/Mozilla/Projects/NSS/Key_Log_Format)
+
+### Backend server perhaps have two DNS names.
+
+Sometimes some server have two DNS names, and the Kerberos authentication will fail because of this.
+You can catch the HTTPS packets to verify what happens. 
