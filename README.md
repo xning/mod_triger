@@ -253,6 +253,10 @@ To run Firefox from the command-line, pls reference [Firefox\-as\-daemon](https:
 
 Yes, it's possible, while I didn't ever encounter one. 
 
+### Firefox need an X server
+
+Pls reference [Firefox\-as\-daemon](https://github.com/xning/bash-functions-for-firefox).
+
 ### Wireshark and HTTPS
 
 Pls reference here
