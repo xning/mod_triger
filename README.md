@@ -203,6 +203,56 @@ Second, get a TGT
 
 It's time to try now.
 
+### How to run more than one proxy on a single server?
+
+If we need run more than one proxy on a single server, we face the following
+questions.
+
+#### 1. Wildcard certificate or multiple certificates.
+
+I think it's possible to use a wildcard certificate, while I just simply tried this solution, and it seems that we need add each proxied servers DNS names to the extend fields of the wildcard certificate.
+
+#### 2. Multiple IPs or multiple port.
+
+We prefer the former solution.
+
+### Persistent storage for our JavaScript
+
+We can try one of the following ways.
+
+##### 1. Proxy server-side database
+
+We can setup a mysql/postgresql server on the proxy server-side. Then we use
+[mod\_perl](https://perl.apache.org/) or [mod\_php](http://php.net/) to
+create CGI scripts or something. After that our JavaScript could read and
+write the server-side database.
+
+Sure we can simply just use one of the database that completely embraces the
+web. For example, [couchdb](http://couchdb.apache.org/) or
+[riak](http://basho.com/riak/).
+
+##### 2. HTML5 client-side Storage and filesystem API
+
+Firefox don't support the filesystem API now. Pls reference the following links
+
+[Why no FileSystem API in Firefox?](https://hacks.mozilla.org/2012/07/why-no-filesystem-api-in-firefox/)  [WebAPI/FileHandleAPI](https://wiki.mozilla.org/WebAPI/FileHandleAPI)  
+[LocalFileSystem](https://developer.mozilla.org/zh-CN/docs/Web/API/LocalFileSystem)
+
+And the indxedDB stores data, except the search key, is binary blob. I don't
+know tools or how to parse these blobs.
+
+So, now, we can use the [loaclStorage/sessionStorage](https://developer.mozilla.org/en-US/docs/Web/Guide/API/DOM/Storage),
+perhaps cookies and caches  
+
+The data stored in [localStorage/sessionStorage](https://developer.mozilla.org/en-US/docs/Web/Guide/API/DOM/Storage) is in a SQLite database. And we can easily have these data to
+be JSON format.
+
+To run Firefox from the command-line, pls reference [Firefox\-as\-daemon](https://github.com/xning/bash-functions-for-firefox).
+
+#### 3. Directly read/write the backend server storage.
+
+Yes, it's possible, while I didn't ever encounter one. 
+
 ### Wireshark and HTTPS
 
 Pls reference here
