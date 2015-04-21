@@ -123,17 +123,22 @@ Then copy the public and private certificates to the right path
 
 #### 2. Tips
 
-To make sure that the Kerberos authentication could work, we need the user engent, here it is firefox,
-to access our proxy server by the orgin backend server DNS name. Hence we should configure the /etc/hosts for firefox.
+To make sure that the Kerberos authentication could work, we need the  
+user engent, here it is firefox, to access our proxy server by the orgin  
+backend server DNS name. Hence we should configure the /etc/hosts for  
+firefox.
 
-For example, suppose we have two hosts. One is 192.168.0.3, the other is 192.168.0.7. We run Firefox
-on the former host, and Apache HTTPD (the proxy host) on the later one. And we let the later to proxy the backend web server "projects.example.com".
+For example, suppose we have two hosts. One is 192.168.0.3, the other is  
+192.168.0.7. We run Firefox on the former host, and Apache HTTPD (the  
+proxy host) on the later one. And we let the later to proxy the backend  
+web server "projects.example.com".
 
 So we add the following line to the /etc/hosts file on the 192.168.0.3  
 
          192.168.0.7 projects.example.com
 
-Sure here you need configure firefox to support the Kerberos authentication. Pls reference  
+Sure here you need configure firefox to support the Kerberos  
+authentication. Pls reference  
 
 [Configuring Firefox to use Kerberos for SSO](https://access.redhat.com/documentation/en-US/Red_Hat_Enterprise_Linux/5/html/Deployment_Guide/sso-config-firefox.html)
 
@@ -176,7 +181,7 @@ Here is an example.
           #TrigerInherit On  
           #TrigerCheckLength 256  
           #TrigerContentType text/html application/xhtml+xml  
-          #TrigerHTML '<script type="text/javascript" defer>console.log("Hello from mod_triger")</script>'  
+          TrigerHTML '<script type="text/javascript" defer>console.log("Hello from mod_triger")</script>'  
           SSLProxyEngine On  
           ProxyPassInterpolateEnv On  
           AllowCONNECT 443  
@@ -205,12 +210,14 @@ It's time to try now.
 
 ### How to run more than one proxy on a single server?
 
-If we need run more than one proxy on a single server, we face the following
-questions.
+If we need run more than one proxy on a single server, we face the  
+following questions.
 
 #### 1. Wildcard certificate or multiple certificates.
 
-I think it's possible to use a wildcard certificate, while I just simply tried this solution, and it seems that we need add each proxied servers DNS names to the extend fields of the wildcard certificate.
+I think it's possible to use a wildcard certificate, while I just simply  
+tried this solution, and it seems that we need add each proxied servers  
+DNS names to the extend fields of the wildcard certificate.
 
 #### 2. Multiple IPs or multiple port.
 
@@ -227,19 +234,20 @@ We can setup a mysql/postgresql server on the proxy server-side. Then we use
 create CGI scripts or something. After that our JavaScript could read and
 write the server-side database.
 
-Sure we can simply just use one of the database that completely embraces the
-web. For example, [couchdb](http://couchdb.apache.org/) or
+Sure we can simply just use one of the database that completely  
+embraces the web. For example, [couchdb](http://couchdb.apache.org/) or
 [riak](http://basho.com/riak/).
 
 ##### 2. HTML5 client-side Storage and filesystem API
 
-Firefox don't support the filesystem API now. Pls reference the following links
+Firefox don't support the filesystem API now. Pls reference the  
+following links
 
 [Why no FileSystem API in Firefox?](https://hacks.mozilla.org/2012/07/why-no-filesystem-api-in-firefox/)  [WebAPI/FileHandleAPI](https://wiki.mozilla.org/WebAPI/FileHandleAPI)  
 [LocalFileSystem](https://developer.mozilla.org/zh-CN/docs/Web/API/LocalFileSystem)
 
-And the indxedDB stores data, except the search key, is binary blob. I don't
-know tools or how to parse these blobs.
+And the indxedDB stores data, except the search key, is binary blob. I  
+don't know tools or how to parse these blobs.
 
 So, now, we can use the [loaclStorage/sessionStorage](https://developer.mozilla.org/en-US/docs/Web/Guide/API/DOM/Storage),
 perhaps cookies and caches  
@@ -265,5 +273,6 @@ Pls reference here
 
 ### Backend server perhaps have two DNS names.
 
-Sometimes some server have two DNS names, and the Kerberos authentication will fail because of this.
-You can catch the HTTPS packets to verify what happens. 
+Sometimes some server have two DNS names, and the Kerberos  
+authentication will fail because of this. You can catch the HTTPS  
+packets to verify what happens. 
