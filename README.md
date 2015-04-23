@@ -221,7 +221,18 @@ DNS names to the extend fields of the wildcard certificate.
 
 #### 2. Multiple IPs or multiple port.
 
-We prefer the former solution.
+We prefer the former solution, pls reference
+[How to create a range of ip addresses on ethX](http://wiki.centos.org/TipsAndTricks/RangeOfIpsOnEthx?highlight=%28ifcfg%29|%28eth%29|%28range%29)  
+
+You should first enable the network daemon and disable NetworkManager
+daemon.
+
+    chkconfig NetworkManager off
+    service NetworkManager stop
+    chkconfig network on
+    service network start
+
+Pls make sure that you disable or set the firewall.
 
 ### Persistent storage for our JavaScript
 
