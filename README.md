@@ -1,9 +1,6 @@
 ## About mod_triger
 
-### Why repeat? There is a
-[mod\_substitute](http://httpd.apache.org/docs/2.2/mod/mod_substitute.html)
-and
-[mod\_proxy\_html](http://httpd.apache.org/docs/2.4/mod/mod_proxy_html.html).
+### Why repeat? There is a [mod\_substitute](http://httpd.apache.org/docs/2.2/mod/mod_substitute.html) and [mod\_proxy\_html](http://httpd.apache.org/docs/2.4/mod/mod_proxy_html.html).
 
 I don't want to parse the total response bodies or use regexes. I just    
 want insert my JavaScript codes after the &lt;head&gt; tag or before    
